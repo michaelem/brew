@@ -71,6 +71,7 @@ require "missing_formula"
 require "diagnostic"
 require "cmd/search"
 require "formula_installer"
+require "batch_formula_installer"
 require "hardware"
 require "development_tools"
 
@@ -240,10 +241,13 @@ module Homebrew
       return if formulae.empty?
       perform_preinstall_checks
 
-      formulae.each do |f|
-        Migrator.migrate_if_needed(f)
-        install_formula(f)
-      end
+       formula_installers = []
+       formulae.each do |f|
+        formula_installers << prepare_formula_installer(f)
+       end
+      batch_formula_installer = BatchFormulaInstaller.new(formula_installers)
+      batch_formula_installer.install
+
     rescue FormulaUnreadableError, FormulaClassUnavailableError,
            TapFormulaUnreadableError, TapFormulaClassUnavailableError => e
       # Need to rescue before `FormulaUnavailableError` (superclass of this)
@@ -339,7 +343,7 @@ module Homebrew
     check_cellar
   end
 
-  def install_formula(f)
+  def prepare_formula_installer(f)
     f.print_tap_action
     build_options = f.build
 
@@ -351,9 +355,7 @@ module Homebrew
     fi.build_bottle         = ARGV.build_bottle?
     fi.interactive          = ARGV.interactive?
     fi.git                  = ARGV.git?
-    fi.prelude
-    fi.install
-    fi.finish
+    return fi
   rescue FormulaInstallationAlreadyAttemptedError
     # We already attempted to install f as part of the dependency tree of
     # another formula. In that case, don't generate an error, just move on.

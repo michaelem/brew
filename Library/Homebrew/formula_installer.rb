@@ -124,13 +124,6 @@ class FormulaInstaller
     true
   end
 
-  def prelude
-    Tab.clear_cache
-    verify_deps_exist unless ignore_deps?
-    lock
-    check_install_sanity
-  end
-
   def verify_deps_exist
     begin
       compute_dependencies
@@ -218,6 +211,7 @@ class FormulaInstaller
   end
 
   def install
+    prelude
     # not in initialize so upgrade can unlink the active keg before calling this
     # function but after instantiating this class so that it can avoid having to
     # relink the active keg if possible (because it is slow).
@@ -342,6 +336,8 @@ class FormulaInstaller
     build_bottle_postinstall if build_bottle?
 
     opoo "Nothing was installed to #{formula.prefix}" unless formula.installed?
+
+    finish
   end
 
   def check_conflicts
@@ -556,10 +552,10 @@ class FormulaInstaller
     fi.link_keg              ||= keg_was_linked if keg_had_linked_keg
     fi.installed_as_dependency = true
     fi.installed_on_request    = df.any_version_installed? && tab.installed_on_request
-    fi.prelude
+
     oh1 "Installing #{formula.full_name} dependency: #{Formatter.identifier(dep.name)}"
+
     fi.install
-    fi.finish
   rescue Exception # rubocop:disable Lint/RescueException
     ignore_interrupts do
       tmp_keg.rename(installed_keg) if tmp_keg && !installed_keg.directory?
@@ -579,45 +575,7 @@ class FormulaInstaller
 
     return if caveats.empty?
     @show_summary_heading = true
-    ohai "Caveats", caveats.to_s
-  end
-
-  def finish
-    return if only_deps?
-
-    ohai "Finishing up" if verbose?
-
-    install_plist
-
-    keg = Keg.new(formula.prefix)
-    link(keg)
-
-    unless @poured_bottle && formula.bottle_specification.skip_relocation?
-      fix_dynamic_linkage(keg)
-    end
-
-    if build_bottle?
-      ohai "Not running post_install as we're building a bottle"
-      puts "You can run it manually using `brew postinstall #{formula.full_name}`"
-    else
-      post_install
-    end
-
-    caveats
-
-    ohai "Summary" if verbose? || show_summary_heading?
-    puts summary
-
-    # let's reset Utils.git_available? if we just installed git
-    Utils.clear_git_available_cache if formula.name == "git"
-
-    # use installed curl when it's needed and available
-    if formula.name == "curl" &&
-       !DevelopmentTools.curl_handles_most_https_certificates?
-      ENV["HOMEBREW_CURL"] = formula.opt_bin/"curl"
-    end
-  ensure
-    unlock
+    ohai "Caveats for #{formula.name}", caveats.to_s
   end
 
   def summary
@@ -903,6 +861,49 @@ class FormulaInstaller
   private
 
   attr_predicate :hold_locks?
+
+  def prelude
+    Tab.clear_cache
+    verify_deps_exist unless ignore_deps?
+    lock
+    check_install_sanity
+  end
+
+  def finish
+    return if only_deps?
+
+    ohai "Finishing up" if verbose?
+
+    install_plist
+
+    keg = Keg.new(formula.prefix)
+    link(keg)
+
+    unless @poured_bottle && formula.bottle_specification.skip_relocation?
+      fix_dynamic_linkage(keg)
+    end
+
+    if build_bottle?
+      ohai "Not running post_install as we're building a bottle"
+      puts "You can run it manually using `brew postinstall #{formula.full_name}`"
+    else
+      post_install
+    end
+
+    ohai "Summary" if verbose? || show_summary_heading?
+    puts summary
+
+    # let's reset Utils.git_available? if we just installed git
+    Utils.clear_git_available_cache if formula.name == "git"
+
+    # use installed curl when it's needed and available
+    if formula.name == "curl" &&
+       !DevelopmentTools.curl_handles_most_https_certificates?
+      ENV["HOMEBREW_CURL"] = formula.opt_bin/"curl"
+    end
+  ensure
+    unlock
+  end
 
   def lock
     return unless self.class.locked.empty?

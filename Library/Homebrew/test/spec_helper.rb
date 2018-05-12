@@ -105,6 +105,8 @@ RSpec.configure do |config|
       ARGV.replace(@__argv)
       ENV.replace(@__env)
 
+      FormulaInstaller.attempted.clear
+
       unless example.metadata.key?(:focus) || ENV.key?("VERBOSE_TESTS")
         $stdout.reopen(@__stdout)
         $stderr.reopen(@__stderr)

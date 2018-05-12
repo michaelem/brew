@@ -58,10 +58,6 @@ describe FormulaInstaller do
       expect(f.prefix/"main.c").not_to exist
       expect(f.prefix/"license").not_to exist
 
-      # Test that things make it into the Cellar
-      keg = Keg.new f.prefix
-      keg.link
-
       bin = HOMEBREW_PREFIX/"bin"
       expect(bin).to be_a_directory
       expect(bin.children.count).to eq(3)

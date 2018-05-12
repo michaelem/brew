@@ -89,10 +89,10 @@ module Homebrew
       end
     end
 
+    formula_installers = []
     formulae_to_install.each do |f|
-      Migrator.migrate_if_needed(f)
       begin
-        upgrade_formula(f)
+        formula_installers << prepare_formula_installer(f)
         next if !ARGV.include?("--cleanup") && !ENV["HOMEBREW_UPGRADE_CLEANUP"]
         next unless f.installed?
         Homebrew::Cleanup.cleanup_formula f
@@ -101,15 +101,12 @@ module Homebrew
         onoe "#{f}: #{e}"
       end
     end
+
+    batch_formula_installer = BatchFormulaInstaller.new(formula_installers)
+    batch_formula_installer.install
   end
 
-  def upgrade_formula(f)
-    if f.opt_prefix.directory?
-      keg = Keg.new(f.opt_prefix.resolved_path)
-      keg_had_linked_opt = true
-      keg_was_linked = keg.linked?
-    end
-
+  def prepare_formula_installer(f)
     formulae_maybe_with_kegs = [f] + f.old_installed_formulae
     outdated_kegs = formulae_maybe_with_kegs
                     .map(&:linked_keg)
@@ -136,7 +133,6 @@ module Homebrew
       fi.installed_as_dependency = tab.installed_as_dependency
       fi.installed_on_request  ||= tab.installed_on_request
     end
-    fi.prelude
 
     oh1 "Upgrading #{Formatter.identifier(f.full_specified_name)} #{fi.options.to_a.join " "}"
 
@@ -145,8 +141,7 @@ module Homebrew
     # do! Seriously, it happens!
     outdated_kegs.each(&:unlink)
 
-    fi.install
-    fi.finish
+    return fi
   rescue FormulaInstallationAlreadyAttemptedError
     # We already attempted to upgrade f as part of the dependency tree of
     # another formula. In that case, don't generate an error, just move on.

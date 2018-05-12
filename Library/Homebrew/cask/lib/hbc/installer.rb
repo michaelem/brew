@@ -1,6 +1,7 @@
 require "rubygems"
 
 require "formula_installer"
+require "batch_formula_installer"
 
 require "hbc/cask_dependencies"
 require "hbc/staged"
@@ -246,23 +247,23 @@ module Hbc
       not_installed = formulae.reject(&:any_version_installed?)
 
       ohai "Installing Formula dependencies: #{not_installed.map(&:to_s).join(", ")}"
+      formula_installers = []
       not_installed.each do |formula|
         begin
           old_argv = ARGV.dup
           ARGV.replace([])
-          FormulaInstaller.new(formula).tap do |fi|
+          formula_installers << FormulaInstaller.new(formula).tap do |fi|
             fi.installed_as_dependency = true
             fi.installed_on_request = false
             fi.show_header = true
             fi.verbose = verbose?
-            fi.prelude
-            fi.install
-            fi.finish
           end
         ensure
           ARGV.replace(old_argv)
         end
       end
+      batch_formula_installer = BatchFormulaInstaller.new(formula_installers)
+      batch_formula_installer.install
     end
 
     def cask_dependencies
